@@ -1,10 +1,10 @@
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, find_namespace_packages
 
 
 setup(
     name="lras_3d",
     version="0.1",
-    packages=find_packages(),
+    packages=find_namespace_packages(),
     description="lras_3d: 3D Understanding Through Local Random Access Sequence Modeling",
     author="Stanford NeuroAI Lab",
     install_requires=[
