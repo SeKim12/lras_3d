@@ -62,4 +62,25 @@ class LRAS7B_Patch8_RGB_Flow_Config(BaseConfig):
     flow_patch_idx_range: tuple = field(default=(68096, 69120))
 
 
+### 7B Model Configs
+@dataclass
+class LRAS7B_Patch8_RGBConfig(BaseConfig):
+    model_class: str = "lras_3d.lras_3d.model.LRAS"
+    block_size: int = 10240 # divisible by 256
+    vocab_size: int = 67584 # 66049 + 255 = 66304 to make it divisible by 256
+    n_layer: int = 32
+    n_head: int = 32
+    n_embd: int = 4096
+    patch_size: int = 2
+    dropout: float = 0.0
+    bias: bool = False
+
+    # position token ranges
+    frame_0_rgb_pos_range: tuple = field(default=(0, 5120))  # positions of first frame patch idx + rgb tokens
+    frame_1_rgb_pos_range: tuple = field(default=(5120, 10240)) # positions of second frame patch idx + rgb tokens
+    
+    # value token ranges
+    rgb_range: tuple = field(default=(0, 65536)) # range of rgb token values - 16 bits (65,536 values)
+    rgb_patch_0_idx_range: tuple = field(default=(65536, 66560)) # range of patch indexes for first frame (1024 values)
+    rgb_patch_1_idx_range:  tuple = field(default=(66560, 67584)) # range of patch indexes for second frame (1024 values)
 

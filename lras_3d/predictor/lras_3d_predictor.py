@@ -847,6 +847,7 @@ class LRASPredictor:
             seed : int = 0,
             num_seq_patches: int = 32,
             mask_out: bool = True,
+            first_logits_only=False
         ) -> Tuple[Image.Image, Image.Image, Image.Image]:
         
         """
@@ -916,7 +917,7 @@ class LRASPredictor:
                 frame0_codes.clone(), frame1_codes.clone(), unmask_indices,
                 campose_codes=campose_codes if campose is not None else None,
                 temperature=temperature, top_p=top_p, top_k=top_k,
-                num_seq_patches=num_seq_patches,
+                num_seq_patches=num_seq_patches, first_logits_only=first_logits_only
             )
         elif mode == 'parallel':
             frame1_pred_codes, rgb_logits = self.two_frame_parallel_forward(
@@ -925,6 +926,9 @@ class LRASPredictor:
                 flow_codes=flow if flow is not None else None,
             )
 
+        if first_logits_only: 
+            return {'rgb_logits': rgb_logits}
+    
         # Compute grid entropy and varentropy
         rgb_grid_entropy = self._compute_rgb_grid_entropy(rgb_logits.cpu(), unmask_indices).detach().cpu().float()
         rgb_grid_varentropy = self._compute_rgb_grid_varentropy(rgb_logits.cpu(), unmask_indices).detach().cpu().float()
@@ -1572,6 +1576,7 @@ class LRASPredictor:
         temperature: Union[float, List[float]] = 1.0,
         num_seq_patches: int = 32,
         rmi=None,
+        first_logits_only=False
     ) -> Tuple[torch.LongTensor, torch.FloatTensor]:
         """
         Perform a forward pass through the model using the "sequential" method.
@@ -1770,14 +1775,37 @@ class LRASPredictor:
                     mask=step_mask.unsqueeze(0).to(self.device).bool(),
                     tgt=step_tgt.unsqueeze(0).to(self.device).long(),
                 )
+            
+            if first_logits_only: 
+                break 
+        
             # sampled_tokens = self.model.sample_logits(logits, temp=temperature, top_k=top_k, top_p=top_p)[0]
             sampled_tokens = self.model.sample_logits(logits.cpu(), temp=0.0)[0]
             step_seq = torch.cat([step_seq, sampled_tokens])
 
             all_logits.append(logits[0].clone())
 
-        all_logits = torch.stack(all_logits, dim=1)
         sort_order = im1_pos[:, len(unmask_idxs) + num_seq_patches:, 0].argsort()
+
+        if first_logits_only: 
+            rgb_logits = logits[0][:, None][sort_order][0]
+            N = im1_seq.shape[1]                  # 1024
+
+            # 1) which rows are ALREADY present?  (922, ) int64 on GPU
+            used_idx = (pred_seq[..., 0] - frame1_patch_offset).long()
+
+            # 2) build a boolean mask of valid (922) vs missing (102) rows
+            mask = torch.zeros(N, dtype=torch.bool, device=self.device)
+            mask[used_idx] = True                                 
+
+            # 3) allocate the final tensor already filled with dummy-logits
+            out = torch.full((N, 1, rgb_logits.shape[-1]), 0, dtype=rgb_logits.dtype, device=self.device)
+
+            # 4) copy the real logits in a single coalesced write
+            out[mask] = rgb_logits
+            return None, out, None  
+    
+        all_logits = torch.stack(all_logits, dim=1)
         rgb_logits = all_logits[sort_order][0]
 
         # insert a dummy patch at any missing patch indexes:

@@ -179,6 +179,16 @@ class ModelFactory:
         if 'optimizer' in ckpt and not return_optimizer: 
             del ckpt['optimizer']
             gc.collect()
+        
+        ## HACK: change config on-the-fly
+        if "quantizer" not in model_name:
+            ckpt['cfg']['config_class'] = "lras_3d.lras_3d.config.LRAS7B_Patch8_RGBConfig"
+            ckpt['cfg']['model_type'] = "lras_3d.utils.model_wrapper.WrappedModel"
+            ckpt['cfg']['model_class'] = "lras_3d.lras_3d.model.LRAS"
+        else:
+            ckpt['cfg']['config_class'] = "lras_3d.local_patch_quantizer.config.LPQConfig"
+            ckpt['cfg']['model_type'] = "lras_3d.utils.model_wrapper.WrappedModel"
+            ckpt['cfg']['model_class'] = "lras_3d.local_patch_quantizer.model.LPQ"
 
         # Get the config from the checkpoint
         config = dict_to_cfg(ckpt['cfg'])
